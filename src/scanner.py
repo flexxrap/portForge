@@ -4,6 +4,9 @@ import argparse
 from typing import List, Tuple, Optional, Dict, Any
 import logging
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskID
+from rich.console import Console
+from rich.table import Table
+from rich import print as rprint
 from .reporting import ReportExporter
 import json
 import os
@@ -29,6 +32,7 @@ class PortScanner:
             'open_ports': [],
             'scan_duration': 0
         }
+        self.console = Console()
 
     def scan_port(self, port: int) -> None:
         """Scan a single port and perform banner grabbing if open."""
@@ -181,6 +185,20 @@ class PortScanner:
             logger.error(f"Scan failed: {e}")
             raise
 
+    def print_colored_results(self) -> None:
+        """Print scan results with colored output using Rich."""
+        table = Table(title=f"Port Scan Results for {self.scan_results['target']}")
+        table.add_column("Port", style="cyan", no_wrap=True)
+        table.add_column("Service", style="magenta")
+        table.add_column("Status", style="green")
+        
+        for port, service in self.open_ports:
+            table.add_row(str(port), service, "Open")
+        
+        self.console.print(table)
+        self.console.print(f"[bold green]Scan completed in {self.scan_results['scan_duration']:.2f} seconds[/bold green]")
+        self.console.print(f"[bold blue]Found {len(self.open_ports)} open ports[/bold blue]")
+
     def save_results(self, filename: str) -> None:
         """Save scan results to a JSON file."""
         with open(filename, 'w') as f:
@@ -208,6 +226,7 @@ def main():
     parser.add_argument("--text", help="Export to text report")
     parser.add_argument("--save", help="Save results to JSON file")
     parser.add_argument("--load", help="Load results from JSON file")
+    parser.add_argument("--no-color", action="store_true", help="Disable colored output")
     
     args = parser.parse_args()
     
@@ -241,10 +260,14 @@ def main():
             logger.info("Scan interrupted by user")
             return
     
-    print(f"\nScan Results for {target}:")
-    print(f"Open Ports ({len(open_ports)} found):")
-    for port, service in open_ports:
-        print(f"  {port}/tcp    {service}")
+    # Print results
+    if not args.no_color:
+        scanner.print_colored_results()
+    else:
+        print(f"\nScan Results for {target}:")
+        print(f"Open Ports ({len(open_ports)} found):")
+        for port, service in open_ports:
+            print(f"  {port}/tcp    {service}")
     
     # Save results if requested
     if args.save:
