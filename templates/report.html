@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Port Scan Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .banner { font-family: monospace; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>Port Scan Report</h1>
+    <h2>Target: {{target}}</h2>
+    <p>Scan completed at: {{timestamp}}</p>
+    
+    {% if results %}
+    <table>
+        <thead>
+            <tr>
+                <th>Port</th>
+                <th>Banner</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for _, port, banner in results %}
+            <tr>
+                <td>{{port}}</td>
+                <td class="banner">{{banner or 'No banner'}}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No open ports found.</p>
+    {% endif %}
+</body>
+</html>
