@@ -1,10 +1,12 @@
 import socket
 import threading
 import argparse
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 import logging
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskID
 from .reporting import ReportExporter
+import json
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,6 +21,14 @@ class PortScanner:
         self.open_ports: List[Tuple[int, str]] = []
         self.progress: Optional[Progress] = None
         self.task_id: Optional[TaskID] = None
+        self.scan_results: Dict[str, Any] = {
+            'target': target,
+            'port_range': port_range,
+            'threads': threads,
+            'timeout': timeout,
+            'open_ports': [],
+            'scan_duration': 0
+        }
 
     def scan_port(self, port: int) -> None:
         """Scan a single port and perform banner grabbing if open."""
@@ -30,6 +40,12 @@ class PortScanner:
                     service = self._grab_banner(sock, port)
                     self.open_ports.append((port, service))
                     logger.info(f"Port {port} is open ({service})")
+        except socket.gaierror:
+            logger.error(f"Hostname {self.target} could not be resolved")
+            raise
+        except socket.error:
+            logger.error(f"Couldn't connect to server {self.target}")
+            raise
         except Exception as e:
             logger.debug(f"Error scanning port {port}: {e}")
         finally:
@@ -116,39 +132,70 @@ class PortScanner:
             return service_map.get(port, 'Unknown')
 
     def scan(self) -> List[Tuple[int, str]]:
-        """Perform multi-threaded port scan."""
-        # Initialize progress bar
-        self.progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        )
+        """Perform multi-threaded port scan with error handling."""
+        import time
+        start_time = time.time()
         
-        with self.progress:
-            total_ports = self.end_port - self.start_port + 1
-            self.task_id = self.progress.add_task(
-                f"[cyan]Scanning {self.target}...", 
-                total=total_ports
+        try:
+            # Initialize progress bar
+            self.progress = Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             )
             
-            threads_list = []
-            for port in range(self.start_port, self.end_port + 1):
-                thread = threading.Thread(target=self.scan_port, args=(port,))
-                threads_list.append(thread)
-                thread.start()
+            with self.progress:
+                total_ports = self.end_port - self.start_port + 1
+                self.task_id = self.progress.add_task(
+                    f"[cyan]Scanning {self.target}...", 
+                    total=total_ports
+                )
                 
-                # Control thread count
-                if len(threads_list) >= self.threads:
-                    for t in threads_list:
-                        t.join()
-                    threads_list = []
+                threads_list = []
+                for port in range(self.start_port, self.end_port + 1):
+                    thread = threading.Thread(target=self.scan_port, args=(port,))
+                    threads_list.append(thread)
+                    thread.start()
+                    
+                    # Control thread count
+                    if len(threads_list) >= self.threads:
+                        for t in threads_list:
+                            t.join(timeout=5)  # Add timeout for stuck threads
+                        threads_list = []
+                
+                # Wait for remaining threads with timeout
+                for thread in threads_list:
+                    thread.join(timeout=5)
             
-            # Wait for remaining threads
-            for thread in threads_list:
-                thread.join()
-        
-        return self.open_ports
+            # Update scan results
+            self.scan_results['open_ports'] = self.open_ports
+            self.scan_results['scan_duration'] = time.time() - start_time
+            
+            return self.open_ports
+            
+        except KeyboardInterrupt:
+            logger.info("Scan interrupted by user")
+            raise
+        except Exception as e:
+            logger.error(f"Scan failed: {e}")
+            raise
+
+    def save_results(self, filename: str) -> None:
+        """Save scan results to a JSON file."""
+        with open(filename, 'w') as f:
+            json.dump(self.scan_results, f, indent=2)
+        logger.info(f"Results saved to {filename}")
+
+    def load_results(self, filename: str) -> None:
+        """Load scan results from a JSON file."""
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f"Results file {filename} not found")
+            
+        with open(filename, 'r') as f:
+            self.scan_results = json.load(f)
+        self.open_ports = [tuple(port) for port in self.scan_results['open_ports']]
+        logger.info(f"Results loaded from {filename}")
 
 def main():
     parser = argparse.ArgumentParser(description="Network Port Scanner")
@@ -159,33 +206,59 @@ def main():
     parser.add_argument("--html", help="Export to HTML report")
     parser.add_argument("--pdf", help="Export to PDF report")
     parser.add_argument("--text", help="Export to text report")
+    parser.add_argument("--save", help="Save results to JSON file")
+    parser.add_argument("--load", help="Load results from JSON file")
     
     args = parser.parse_args()
     
-    # Parse port range
-    if '-' in args.ports:
-        start, end = map(int, args.ports.split('-'))
+    # Handle loading results
+    if args.load:
+        scanner = PortScanner("", (0, 0))  # Dummy scanner for loading
+        try:
+            scanner.load_results(args.load)
+            open_ports = scanner.open_ports
+            target = scanner.scan_results['target']
+        except FileNotFoundError as e:
+            logger.error(e)
+            return
     else:
-        start = end = int(args.ports)
+        # Parse port range
+        if '-' in args.ports:
+            start, end = map(int, args.ports.split('-'))
+        else:
+            start = end = int(args.ports)
+        
+        scanner = PortScanner(args.target, (start, end), args.threads, args.timeout)
+        target = args.target
+        
+        try:
+            logger.info(f"Scanning {target} ports {start}-{end} with {args.threads} threads")
+            open_ports = scanner.scan()
+        except (socket.gaierror, socket.error) as e:
+            logger.error(f"Scan failed: {e}")
+            return
+        except KeyboardInterrupt:
+            logger.info("Scan interrupted by user")
+            return
     
-    scanner = PortScanner(args.target, (start, end), args.threads, args.timeout)
-    logger.info(f"Scanning {args.target} ports {start}-{end} with {args.threads} threads")
-    
-    open_ports = scanner.scan()
-    
-    print("\nOpen Ports:")
+    print(f"\nScan Results for {target}:")
+    print(f"Open Ports ({len(open_ports)} found):")
     for port, service in open_ports:
         print(f"  {port}/tcp    {service}")
     
+    # Save results if requested
+    if args.save:
+        scanner.save_results(args.save)
+    
     # Export reports if requested
     if args.html:
-        ReportExporter.export_to_html(args.target, open_ports, args.html)
+        ReportExporter.export_to_html(target, open_ports, args.html)
     
     if args.pdf:
-        ReportExporter.export_to_pdf(args.target, open_ports, args.pdf)
+        ReportExporter.export_to_pdf(target, open_ports, args.pdf)
     
     if args.text:
-        ReportExporter.export_to_text(args.target, open_ports, args.text)
+        ReportExporter.export_to_text(target, open_ports, args.text)
 
 if __name__ == "__main__":
     main()

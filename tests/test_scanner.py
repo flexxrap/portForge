@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import socket
+import json
+import os
 from src.scanner import PortScanner
 
 class TestPortScanner(unittest.TestCase):
@@ -55,6 +57,25 @@ class TestPortScanner(unittest.TestCase):
             banner = self.scanner._grab_banner(mock_socket_instance, 12345)
             
             self.assertEqual(banner, "Unknown")
+    
+    def test_save_and_load_results(self):
+        """Test saving and loading scan results."""
+        # Set up test data
+        self.scanner.open_ports = [(80, "Apache"), (22, "OpenSSH")]
+        self.scanner.scan_results['open_ports'] = self.scanner.open_ports
+        
+        # Test saving
+        filename = "test_results.json"
+        self.scanner.save_results(filename)
+        self.assertTrue(os.path.exists(filename))
+        
+        # Test loading
+        new_scanner = PortScanner("test", (1, 100))
+        new_scanner.load_results(filename)
+        self.assertEqual(new_scanner.open_ports, self.scanner.open_ports)
+        
+        # Cleanup
+        os.remove(filename)
 
 if __name__ == '__main__':
     unittest.main()

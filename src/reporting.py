@@ -4,6 +4,7 @@ import webbrowser
 import os
 from datetime import datetime
 from weasyprint import HTML
+import json
 
 class ReportExporter:
     @staticmethod
@@ -22,12 +23,16 @@ class ReportExporter:
         tr:nth-child(even) {{ background-color: #f9f9f9; }}
         h1 {{ color: #333; }}
         .timestamp {{ color: #666; font-size: 0.9em; }}
+        .summary {{ background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
     </style>
 </head>
 <body>
     <h1>Port Scan Report</h1>
-    <p class="timestamp">Scan performed on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-    <p><strong>Target:</strong> {target}</p>
+    <div class="summary">
+        <p class="timestamp">Scan performed on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        <p><strong>Target:</strong> {target}</p>
+        <p><strong>Open Ports Found:</strong> {len(open_ports)}</p>
+    </div>
     
     <table>
         <tr>
@@ -65,6 +70,7 @@ class ReportExporter:
         with open(filename, 'w') as f:
             f.write(f"Port Scan Report for {target}\n")
             f.write(f"Scan performed on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Open Ports Found: {len(open_ports)}\n")
             f.write("=" * 50 + "\n\n")
             
             f.write("Open Ports:\n")
