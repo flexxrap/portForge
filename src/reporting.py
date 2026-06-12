@@ -7,7 +7,7 @@ from weasyprint import HTML
 
 class ReportExporter:
     @staticmethod
-    def export_to_html(target: str, open_ports: List[Tuple[int, str]], filename: str = "scan_report.html") -> None:
+    def export_to_html(target: str, open_ports: List[Tuple[int, str]], filename: str = "scan_report.html") -> str:
         """Export scan results to HTML report."""
         html_content = f"""
 <!DOCTYPE html>
