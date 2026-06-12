@@ -10,6 +10,9 @@ A Python-based network port scanning tool with multi-threading, service detectio
 - Export reports to HTML, PDF, and text formats
 - Configurable timeout and thread count
 - Support for custom port ranges
+- Colored terminal output
+- Save/load scan results
+- Comprehensive error handling
 
 ## Installation
 
@@ -42,6 +45,21 @@ port-scanner target_host --html report.html
 Export to PDF report:
 ```bash
 port-scanner target_host --pdf report.pdf
+```
+
+Save results to JSON:
+```bash
+port-scanner target_host --save results.json
+```
+
+Load and display previous results:
+```bash
+port-scanner --load results.json
+```
+
+Disable colored output:
+```bash
+port-scanner target_host --no-color
 ```
 
 ## Development
