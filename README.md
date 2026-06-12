@@ -21,17 +21,17 @@ pip install -r requirements.txt
 
 Basic scan:
 ```bash
-python src/scanner.py 192.168.1.1
+python src/scanner.py target_host
 ```
 
 Advanced scan with options:
 ```bash
-python src/scanner.py 192.168.1.1 -p 1-65535 -t 200 --timeout 0.5
+python src/scanner.py target_host -p 1-65535 -t 200 --timeout 0.5
 ```
 
 Export to HTML report:
 ```bash
-python src/scanner.py 192.168.1.1 --html report.html
+python src/scanner.py target_host --html report.html
 ```
 
 ## Disclaimer
