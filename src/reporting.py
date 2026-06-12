@@ -3,6 +3,7 @@ from typing import List, Tuple
 import webbrowser
 import os
 from datetime import datetime
+from weasyprint import HTML
 
 class ReportExporter:
     @staticmethod
@@ -48,6 +49,15 @@ class ReportExporter:
             f.write(html_content)
         
         print(f"HTML report saved to {filename}")
+        return html_content
+    
+    @staticmethod
+    def export_to_pdf(target: str, open_ports: List[Tuple[int, str]], filename: str = "scan_report.pdf") -> None:
+        """Export scan results to PDF report."""
+        html_content = ReportExporter.export_to_html(target, open_ports, "temp_report.html")
+        HTML(string=html_content).write_pdf(filename)
+        os.remove("temp_report.html")  # Clean up temporary file
+        print(f"PDF report saved to {filename}")
         
     @staticmethod
     def export_to_text(target: str, open_ports: List[Tuple[int, str]], filename: str = "scan_report.txt") -> None:

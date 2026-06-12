@@ -91,6 +91,7 @@ def main():
     parser.add_argument("-t", "--threads", type=int, default=100, help="Number of threads")
     parser.add_argument("--timeout", type=float, default=1.0, help="Connection timeout in seconds")
     parser.add_argument("--html", help="Export to HTML report")
+    parser.add_argument("--pdf", help="Export to PDF report")
     parser.add_argument("--text", help="Export to text report")
     
     args = parser.parse_args()
@@ -113,6 +114,9 @@ def main():
     # Export reports if requested
     if args.html:
         ReportExporter.export_to_html(args.target, open_ports, args.html)
+    
+    if args.pdf:
+        ReportExporter.export_to_pdf(args.target, open_ports, args.pdf)
     
     if args.text:
         ReportExporter.export_to_text(args.target, open_ports, args.text)
