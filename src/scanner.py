@@ -3,6 +3,8 @@ import threading
 import argparse
 from typing import List, Tuple, Optional
 import logging
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskID
+from .reporting import ReportExporter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,6 +17,8 @@ class PortScanner:
         self.threads = threads
         self.timeout = timeout
         self.open_ports: List[Tuple[int, str]] = []
+        self.progress: Optional[Progress] = None
+        self.task_id: Optional[TaskID] = None
 
     def scan_port(self, port: int) -> None:
         """Scan a single port and perform banner grabbing if open."""
@@ -28,6 +32,10 @@ class PortScanner:
                     logger.info(f"Port {port} is open ({service})")
         except Exception as e:
             logger.debug(f"Error scanning port {port}: {e}")
+        finally:
+            # Update progress bar
+            if self.progress and self.task_id:
+                self.progress.update(self.task_id, advance=1)
 
     def _grab_banner(self, sock: socket.socket, port: int) -> str:
         """Attempt to grab service banner from an open port."""
@@ -43,21 +51,36 @@ class PortScanner:
 
     def scan(self) -> List[Tuple[int, str]]:
         """Perform multi-threaded port scan."""
-        threads_list = []
-        for port in range(self.start_port, self.end_port + 1):
-            thread = threading.Thread(target=self.scan_port, args=(port,))
-            threads_list.append(thread)
-            thread.start()
-            
-            # Control thread count
-            if len(threads_list) >= self.threads:
-                for t in threads_list:
-                    t.join()
-                threads_list = []
+        # Initialize progress bar
+        self.progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        )
         
-        # Wait for remaining threads
-        for thread in threads_list:
-            thread.join()
+        with self.progress:
+            total_ports = self.end_port - self.start_port + 1
+            self.task_id = self.progress.add_task(
+                f"[cyan]Scanning {self.target}...", 
+                total=total_ports
+            )
+            
+            threads_list = []
+            for port in range(self.start_port, self.end_port + 1):
+                thread = threading.Thread(target=self.scan_port, args=(port,))
+                threads_list.append(thread)
+                thread.start()
+                
+                # Control thread count
+                if len(threads_list) >= self.threads:
+                    for t in threads_list:
+                        t.join()
+                    threads_list = []
+            
+            # Wait for remaining threads
+            for thread in threads_list:
+                thread.join()
         
         return self.open_ports
 
@@ -67,6 +90,8 @@ def main():
     parser.add_argument("-p", "--ports", default="1-1000", help="Port range (e.g., 1-1000 or 80)")
     parser.add_argument("-t", "--threads", type=int, default=100, help="Number of threads")
     parser.add_argument("--timeout", type=float, default=1.0, help="Connection timeout in seconds")
+    parser.add_argument("--html", help="Export to HTML report")
+    parser.add_argument("--text", help="Export to text report")
     
     args = parser.parse_args()
     
@@ -84,6 +109,13 @@ def main():
     print("\nOpen Ports:")
     for port, service in open_ports:
         print(f"  {port}/tcp    {service}")
+    
+    # Export reports if requested
+    if args.html:
+        ReportExporter.export_to_html(args.target, open_ports, args.html)
+    
+    if args.text:
+        ReportExporter.export_to_text(args.target, open_ports, args.text)
 
 if __name__ == "__main__":
     main()
