@@ -40,14 +40,80 @@ class PortScanner:
     def _grab_banner(self, sock: socket.socket, port: int) -> str:
         """Attempt to grab service banner from an open port."""
         try:
-            if port in [80, 8080]:
+            # Send appropriate handshake for different services
+            if port in [80, 8080, 8000]:
                 sock.send(b"HEAD / HTTP/1.1\r\nHost: {}\r\n\r\n".format(self.target.encode()))
+            elif port in [21]:
+                # FTP - wait for banner
+                pass
+            elif port in [22]:
+                # SSH - wait for banner
+                pass
+            elif port in [25, 465, 587]:
+                # SMTP - send EHLO
+                sock.send(b"EHLO scanner\r\n")
+            elif port in [110, 995]:
+                # POP3 - wait for banner
+                pass
+            elif port in [143, 993]:
+                # IMAP - send CAPABILITY
+                sock.send(b"CAPABILITY\r\n")
             else:
                 sock.send(b"\r\n\r\n")
-            banner = sock.recv(1024).decode().strip()
-            return banner.split('\n')[0] if banner else 'Unknown'
+            
+            banner = sock.recv(1024).decode(errors='ignore').strip()
+            # Clean up the banner for better readability
+            if '\n' in banner:
+                banner = banner.split('\n')[0]
+            if '\r' in banner:
+                banner = banner.split('\r')[0]
+                
+            # If we get an empty banner, try to identify service by port
+            if not banner:
+                service_map = {
+                    21: 'FTP',
+                    22: 'SSH',
+                    23: 'Telnet',
+                    25: 'SMTP',
+                    53: 'DNS',
+                    80: 'HTTP',
+                    110: 'POP3',
+                    143: 'IMAP',
+                    443: 'HTTPS',
+                    465: 'SMTPS',
+                    587: 'SMTP',
+                    993: 'IMAPS',
+                    995: 'POP3S',
+                    3306: 'MySQL',
+                    5432: 'PostgreSQL',
+                    6379: 'Redis',
+                    27017: 'MongoDB'
+                }
+                return service_map.get(port, 'Unknown')
+                
+            return banner if banner else 'Unknown'
         except Exception:
-            return 'Unknown'
+            # Fallback service identification by port number
+            service_map = {
+                21: 'FTP',
+                22: 'SSH',
+                23: 'Telnet',
+                25: 'SMTP',
+                53: 'DNS',
+                80: 'HTTP',
+                110: 'POP3',
+                143: 'IMAP',
+                443: 'HTTPS',
+                465: 'SMTPS',
+                587: 'SMTP',
+                993: 'IMAPS',
+                995: 'POP3S',
+                3306: 'MySQL',
+                5432: 'PostgreSQL',
+                6379: 'Redis',
+                27017: 'MongoDB'
+            }
+            return service_map.get(port, 'Unknown')
 
     def scan(self) -> List[Tuple[int, str]]:
         """Perform multi-threaded port scan."""
